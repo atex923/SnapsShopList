@@ -1,0 +1,404 @@
+import AVFoundation
+import ImageIO
+import SwiftUI
+@preconcurrency import Vision
+
+enum BarcodePhotoRecognitionError: LocalizedError {
+    case invalidImage
+    case noBarcode
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImage: "無法讀取選取的條碼照片。"
+        case .noBarcode: "照片中沒有找到可辨識的一維條碼，請選擇更清楚的照片。"
+        }
+    }
+}
+
+enum BarcodePhotoRecognizer {
+    static func recognize(_ data: Data) async throws -> String {
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { throw BarcodePhotoRecognitionError.invalidImage }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let orientationRaw = (properties?[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
+        let orientation = CGImagePropertyOrientation(rawValue: orientationRaw) ?? .up
+
+        let candidates: [(String, VNBarcodeSymbology)] = try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectBarcodesRequest { request, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let observations = request.results as? [VNBarcodeObservation] ?? []
+                continuation.resume(returning: observations.compactMap { observation in
+                    guard let value = observation.payloadStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !value.isEmpty else { return nil }
+                    return (value, observation.symbology)
+                })
+            }
+            request.symbologies = [.ean13, .ean8, .upce, .code128, .code93, .code39, .qr]
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try VNImageRequestHandler(cgImage: image, orientation: orientation).perform([request])
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+
+        let oneDimensionalOrder: [VNBarcodeSymbology] = [.ean13, .ean8, .upce, .code128, .code93, .code39]
+        for symbology in oneDimensionalOrder {
+            if let match = candidates.first(where: { $0.1 == symbology }) { return match.0 }
+        }
+        if let fallback = candidates.first { return fallback.0 }
+        throw BarcodePhotoRecognitionError.noBarcode
+    }
+}
+
+struct BarcodeScannerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    @State private var isManualEntryPresented = false
+    @State private var manualBarcode = ""
+    @State private var scannerError = ""
+    @State private var isMacroEnabled = true
+    @State private var isMacroAvailable = false
+    let onCode: (String) -> Void
+    let onNoBarcode: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch authorizationStatus {
+                case .authorized:
+                    ZStack {
+                        BarcodeScannerView(
+                            isMacroEnabled: isMacroEnabled,
+                            onCode: onCode,
+                            onError: { scannerError = $0 },
+                            onMacroAvailability: { available in
+                                isMacroAvailable = available
+                                if !available { isMacroEnabled = false }
+                            }
+                        )
+                            .ignoresSafeArea()
+
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(.white, style: StrokeStyle(lineWidth: 3, dash: [12, 8]))
+                            .frame(width: 300, height: 190)
+                            .shadow(color: .black.opacity(0.5), radius: 5)
+
+                        VStack(spacing: 14) {
+                            Spacer()
+                            Button {
+                                isMacroEnabled.toggle()
+                            } label: {
+                                Label(isMacroEnabled ? "小花近拍已開啟" : "開啟小花近拍", systemImage: "camera.macro")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 16)
+                                    .frame(minHeight: 44)
+                                    .background(isMacroEnabled ? Color.green.opacity(0.78) : Color.black.opacity(0.62), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!isMacroAvailable)
+                            .opacity(isMacroAvailable ? 1 : 0.55)
+                            .accessibilityHint(isMacroAvailable ? "切換條碼近距離對焦" : "這台裝置不支援近距離對焦")
+
+                            Text("將食品條碼置於框線內")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(.black.opacity(0.62), in: Capsule())
+                                .padding(.bottom, 48)
+                        }
+                    }
+
+                case .notDetermined:
+                    ProgressView("正在要求相機權限…")
+                        .task { await requestCameraAccess() }
+
+                default:
+                    ContentUnavailableView {
+                        Label("無法使用相機", systemImage: "camera.fill")
+                    } description: {
+                        Text("請前往「設定」允許購物記本使用相機。")
+                    } actions: {
+                        Button("開啟設定") {
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("掃描食品條碼")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("關閉", systemImage: "xmark") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("手動輸入", systemImage: "keyboard") {
+                        isManualEntryPresented = true
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button("建立無條碼商品", systemImage: "tag.slash.fill") {
+                    onNoBarcode()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        }
+        .alert("手動輸入條碼", isPresented: $isManualEntryPresented) {
+            TextField("商品條碼", text: $manualBarcode)
+                .keyboardType(.asciiCapableNumberPad)
+            Button("取消", role: .cancel) {}
+            Button("確定") {
+                let code = manualBarcode.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !code.isEmpty else { return }
+                onCode(code)
+            }
+        } message: {
+            Text("條碼無法辨識時，可直接輸入包裝上的數字。")
+        }
+        .alert("無法啟動掃描", isPresented: Binding(
+            get: { !scannerError.isEmpty },
+            set: { if !$0 { scannerError = "" } }
+        )) {
+            Button("改用手動輸入") { isManualEntryPresented = true }
+            Button("關閉", role: .cancel) { dismiss() }
+        } message: {
+            Text(scannerError)
+        }
+    }
+
+    @MainActor
+    private func requestCameraAccess() async {
+        _ = await AVCaptureDevice.requestAccess(for: .video)
+        authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    }
+}
+
+private struct BarcodeScannerView: UIViewControllerRepresentable {
+    let isMacroEnabled: Bool
+    let onCode: (String) -> Void
+    let onError: (String) -> Void
+    let onMacroAvailability: (Bool) -> Void
+
+    func makeUIViewController(context: Context) -> BarcodeScannerViewController {
+        BarcodeScannerViewController(
+            isMacroEnabled: isMacroEnabled,
+            onCode: onCode,
+            onError: onError,
+            onMacroAvailability: onMacroAvailability
+        )
+    }
+
+    func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {
+        uiViewController.setMacroEnabled(isMacroEnabled)
+    }
+}
+
+private final class BarcodeScannerViewController: UIViewController,
+    AVCaptureMetadataOutputObjectsDelegate {
+
+    private var captureSession: AVCaptureSession?
+    private let sessionQueue = DispatchQueue(
+        label: "SnapsShopList.CaptureSession",
+        qos: .userInitiated
+    )
+    private let metadataQueue = DispatchQueue(label: "SnapsShopList.BarcodeMetadata")
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private let onCode: (String) -> Void
+    private let onError: (String) -> Void
+    private let onMacroAvailability: (Bool) -> Void
+    private var hasReturnedCode = false
+    private var isConfigured = false
+    private var isMacroEnabled: Bool
+    private var cameraDevice: AVCaptureDevice?
+
+    init(
+        isMacroEnabled: Bool,
+        onCode: @escaping (String) -> Void,
+        onError: @escaping (String) -> Void,
+        onMacroAvailability: @escaping (Bool) -> Void
+    ) {
+        self.isMacroEnabled = isMacroEnabled
+        self.onCode = onCode
+        self.onError = onError
+        self.onMacroAvailability = onMacroAvailability
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) 尚未實作")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        metadataQueue.async { [weak self] in
+            self?.hasReturnedCode = false
+        }
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            if self.captureSession == nil {
+                let session = AVCaptureSession()
+                self.captureSession = session
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    let layer = AVCaptureVideoPreviewLayer(session: session)
+                    layer.videoGravity = .resizeAspectFill
+                    layer.frame = self.view.bounds
+                    self.view.layer.insertSublayer(layer, at: 0)
+                    self.previewLayer = layer
+                }
+            }
+            if !isConfigured {
+                configureCaptureSession()
+            }
+            guard let captureSession, isConfigured, !captureSession.isRunning else { return }
+            captureSession.startRunning()
+        }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        sessionQueue.async { [weak self] in
+            guard let self, let captureSession, captureSession.isRunning else { return }
+            captureSession.stopRunning()
+        }
+    }
+
+    private func configureCaptureSession() {
+        guard let captureSession else { return }
+        captureSession.beginConfiguration()
+        captureSession.sessionPreset = .high
+        defer { captureSession.commitConfiguration() }
+
+        guard
+            let camera = preferredBackCamera(),
+            let input = try? AVCaptureDeviceInput(device: camera),
+            captureSession.canAddInput(input)
+        else {
+            reportError("找不到可用的相機輸入，請改用手動輸入條碼。")
+            return
+        }
+
+        captureSession.addInput(input)
+        cameraDevice = camera
+        let macroAvailable = camera.isAutoFocusRangeRestrictionSupported
+        applyMacroSetting(to: camera)
+        DispatchQueue.main.async { [onMacroAvailability] in
+            onMacroAvailability(macroAvailable)
+        }
+
+        let output = AVCaptureMetadataOutput()
+        guard captureSession.canAddOutput(output) else {
+            reportError("無法建立條碼辨識輸出，請改用手動輸入條碼。")
+            return
+        }
+        captureSession.addOutput(output)
+        output.setMetadataObjectsDelegate(self, queue: metadataQueue)
+
+        // Food packages primarily use one-dimensional retail barcodes. Keep QR
+        // as a fallback, but register and select all 1D formats first.
+        let desiredTypes: [AVMetadataObject.ObjectType] = [
+            .ean13, .ean8, .upce, .code128, .code93, .code39, .qr
+        ]
+        output.metadataObjectTypes = desiredTypes.filter {
+            output.availableMetadataObjectTypes.contains($0)
+        }
+        guard !output.metadataObjectTypes.isEmpty else {
+            reportError("這台裝置不支援目前的條碼格式。")
+            return
+        }
+        isConfigured = true
+    }
+
+    func setMacroEnabled(_ enabled: Bool) {
+        sessionQueue.async { [weak self] in
+            guard let self, self.isMacroEnabled != enabled else { return }
+            self.isMacroEnabled = enabled
+            if let cameraDevice = self.cameraDevice {
+                self.applyMacroSetting(to: cameraDevice)
+            }
+        }
+    }
+
+    private func preferredBackCamera() -> AVCaptureDevice? {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera],
+            mediaType: .video,
+            position: .back
+        )
+        return discovery.devices.first ?? AVCaptureDevice.default(for: .video)
+    }
+
+    private func applyMacroSetting(to camera: AVCaptureDevice) {
+        guard camera.isAutoFocusRangeRestrictionSupported else { return }
+        do {
+            try camera.lockForConfiguration()
+            camera.autoFocusRangeRestriction = isMacroEnabled ? .near : .none
+            if camera.isFocusModeSupported(.continuousAutoFocus) {
+                camera.focusMode = .continuousAutoFocus
+            }
+            camera.unlockForConfiguration()
+        } catch {
+            reportError("無法切換小花近拍模式：\(error.localizedDescription)")
+        }
+    }
+
+    private func reportError(_ message: String) {
+        AppErrorLogger.record(message: message, category: "條碼掃描", context: "AVCaptureSession")
+        DispatchQueue.main.async { [onError] in
+            onError(message)
+        }
+    }
+
+    func metadataOutput(
+        _ output: AVCaptureMetadataOutput,
+        didOutput metadataObjects: [AVMetadataObject],
+        from connection: AVCaptureConnection
+    ) {
+        guard !hasReturnedCode else { return }
+        let machineCodes = metadataObjects.compactMap {
+            $0 as? AVMetadataMachineReadableCodeObject
+        }
+        let oneDimensionalTypes: Set<AVMetadataObject.ObjectType> = [
+            .ean13, .ean8, .upce, .code128, .code93, .code39
+        ]
+        let object = machineCodes.first { oneDimensionalTypes.contains($0.type) }
+            ?? machineCodes.first { $0.type == .qr }
+        guard let value = object?.stringValue, !value.isEmpty else { return }
+
+        hasReturnedCode = true
+        sessionQueue.async { [weak self] in
+            guard let self, let captureSession, captureSession.isRunning else { return }
+            captureSession.stopRunning()
+        }
+        DispatchQueue.main.async { [onCode] in
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onCode(value)
+        }
+    }
+}

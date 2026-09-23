@@ -1,0 +1,126 @@
+import Foundation
+import SwiftData
+
+enum AppTheme {
+    static let version = "V0.1.2-test"
+}
+
+@main
+@MainActor
+enum BackupSupportSmoke {
+    static func main() throws {
+        let schema = Schema([
+            Product.self,
+            PurchaseRecord.self,
+            ProductPhoto.self,
+            StorePreset.self,
+            ShoppingListItem.self
+        ])
+        let configuration = ModelConfiguration(
+            "SnapsShopListBackupSmoke",
+            schema: schema,
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let product = Product(barcode: "4710000000001", name: "測試牛奶")
+        context.insert(product)
+
+        let record = PurchaseRecord(
+            recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            store: "測試商店",
+            storeBranch: "一號店",
+            city: "臺北市",
+            district: "信義區",
+            price: 89,
+            amount: 1_000,
+            unit: "ml",
+            isOnSale: true,
+            isBuyOneGetOne: false,
+            purchaseQuantity: 2,
+            latitude: 25.033,
+            longitude: 121.565,
+            locationAccuracy: 8,
+            product: product
+        )
+        context.insert(record)
+
+        let previousRecord = PurchaseRecord(
+            recordedAt: Date(timeIntervalSince1970: 1_600_000_000),
+            store: "舊價格商店",
+            price: 120,
+            amount: 1_000,
+            unit: "ml",
+            isOnSale: false,
+            isBuyOneGetOne: false,
+            product: product
+        )
+        context.insert(previousRecord)
+
+        let photoData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        context.insert(ProductPhoto(fileName: "", imageData: photoData, product: product))
+        context.insert(StorePreset(name: "測試商店", branch: "一號店", city: "臺北市", district: "信義區"))
+        context.insert(ShoppingListItem(productID: product.id, barcode: product.barcode, productName: product.name))
+        try context.save()
+
+        let archive = try BackupManager.makeArchive(in: context)
+        precondition(archive.schemaVersion == 1)
+        precondition(archive.products.count == 1)
+        precondition(archive.recordCount == 2)
+        precondition(archive.photoCount == 1)
+        precondition(archive.storePresets.count == 1)
+        precondition(archive.shoppingList.count == 1)
+        precondition(archive.products[0].photos[0].imageData == photoData)
+        precondition(product.latestRecord?.id == record.id)
+        precondition(product.priceStatistics?.lowestRecord.id == record.id)
+        precondition(product.priceStatistics?.highestRecord.id == previousRecord.id)
+
+        let encoded = try BackupCoding.encoder.encode(archive)
+        let decoded = try BackupCoding.decoder.decode(SnapsBackupArchive.self, from: encoded)
+        try BackupManager.validate(decoded)
+
+        let merge = try BackupManager.importArchive(decoded, mode: .merge, in: context)
+        precondition(merge.products == 0)
+        precondition(merge.records == 0)
+        precondition(merge.photos == 0)
+        try expectCounts(context, products: 1, records: 2, photos: 1, stores: 1, shopping: 1)
+
+        try BackupManager.deleteAll(in: context)
+        try expectCounts(context, products: 0, records: 0, photos: 0, stores: 0, shopping: 0)
+
+        let restored = try BackupManager.importArchive(decoded, mode: .replace, in: context)
+        precondition(restored.products == 1)
+        precondition(restored.records == 2)
+        precondition(restored.photos == 1)
+        try expectCounts(context, products: 1, records: 2, photos: 1, stores: 1, shopping: 1)
+
+        let restoredProduct = try context.fetch(FetchDescriptor<Product>()).first
+        precondition(restoredProduct?.barcode == product.barcode)
+        precondition(restoredProduct?.records?.contains(where: { $0.storeBranch == "一號店" }) == true)
+        precondition(restoredProduct?.photos?.first?.imageData == photoData)
+
+        print("BackupSupport smoke tests passed")
+    }
+
+    private static func expectCounts(
+        _ context: ModelContext,
+        products: Int,
+        records: Int,
+        photos: Int,
+        stores: Int,
+        shopping: Int
+    ) throws {
+        let productCount = try context.fetchCount(FetchDescriptor<Product>())
+        let recordCount = try context.fetchCount(FetchDescriptor<PurchaseRecord>())
+        let photoCount = try context.fetchCount(FetchDescriptor<ProductPhoto>())
+        let storeCount = try context.fetchCount(FetchDescriptor<StorePreset>())
+        let shoppingCount = try context.fetchCount(FetchDescriptor<ShoppingListItem>())
+        precondition(productCount == products)
+        precondition(recordCount == records)
+        precondition(photoCount == photos)
+        precondition(storeCount == stores)
+        precondition(shoppingCount == shopping)
+    }
+}
