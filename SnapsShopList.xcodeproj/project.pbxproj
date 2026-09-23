@@ -32,27 +32,27 @@
 /* Begin PBXFileReference section */
 		A20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapsShopListApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		A20000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/AppTheme.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		A20000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScannerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/BarcodeScannerView.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductHistoryView.swift; sourceTree = "<group>"; };
-		A20000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/PhotoSupport.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A2000000000000000000000A = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SnapsShopList.entitlements; sourceTree = "<group>"; };
 		A2000000000000000000000B = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SnapsShopList.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000000000000000000000C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductEntryViews.swift; sourceTree = "<group>"; };
-		A2000000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationRecorder.swift; sourceTree = "<group>"; };
-		A2000000000000000000000E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogging.swift; sourceTree = "<group>"; };
-		A2000000000000000000000F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseLogic.swift; sourceTree = "<group>"; };
-		A20000000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSupport.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/LocationRecorder.swift; sourceTree = "<group>"; };
+		A2000000000000000000000E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/ErrorLogging.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/PurchaseLogic.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/BackupSupport.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		A20000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverseasSupport.swift; sourceTree = "<group>"; };
-		A20000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverseasTextRecognizer.swift; sourceTree = "<group>"; };
-		A20000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PantrySupport.swift; sourceTree = "<group>"; };
-		A20000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoSupport.swift; sourceTree = "<group>"; };
-		A20000000000000000000016 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSupport.swift; sourceTree = "<group>"; };
-		A20000000000000000000017 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickModeSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/OverseasSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/OverseasTextRecognizer.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/PantrySupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/InfoSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/SyncSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Support/QuickModeSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
