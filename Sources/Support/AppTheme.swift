@@ -8,8 +8,12 @@ enum AppTheme {
     static let background = Color(red: 0.91, green: 0.97, blue: 0.92)
     static let overseasBackground = Color(red: 0.89, green: 0.95, blue: 0.99)
     static let overseasCamera = Color(red: 0.72, green: 0.34, blue: 0.40)
-    static let version = "V0.11.2"
-    static let buildDate = "20260923"
+    static var version: String {
+        let value = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return "V\(value ?? "0.12.0")"
+    }
+
+    static let buildDate = "20260925"
 }
 
 enum AppLimits {
@@ -56,7 +60,7 @@ struct RaisedGlassIconButtonStyle: ButtonStyle {
 
 struct AppFooter: View {
     var body: some View {
-        Text("\(AppTheme.version) (\(AppTheme.buildDate))")
+        Text("\(AppTheme.version)(\(AppTheme.buildDate))")
         .font(.caption2)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)

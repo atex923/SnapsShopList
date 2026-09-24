@@ -1,5 +1,6 @@
 .DS_Store
 DerivedData/
+.codex-derived/
 build/
 *.xcuserstate
 **/xcuserdata/

@@ -329,6 +329,16 @@ struct SettingsView: View {
             LabeledContent("版本", value: AppTheme.version)
             LabeledContent("製作日期", value: AppTheme.buildDate)
             LabeledContent("程式設計者", value: "Atex Lin")
+            Link(destination: URL(string: "mailto:atexapp.lin@gmail.com")!) {
+                HStack {
+                    Label("使用回饋", systemImage: "envelope")
+                    Spacer()
+                    Text("atexapp.lin@gmail.com")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityLabel("寄送使用回饋至 atexapp.lin@gmail.com")
             NavigationLink("程式錯誤紀錄") { ErrorLogView() }
         }
     }

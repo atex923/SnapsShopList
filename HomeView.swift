@@ -270,69 +270,89 @@ struct HomeView: View {
     @ViewBuilder
     private var barcodeResult: some View {
         if !scannedBarcode.isEmpty {
-            Button(action: openLookupDetails) {
+            if let product = scannedProduct, !quickModeSession.isEnabled {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
-                        Label(scannerMessage, systemImage: scannedProduct == nil ? "questionmark.circle" : "tag.fill")
+                        Label(scannerMessage, systemImage: "tag.fill")
                             .font(.headline)
                         Spacer()
-                        Image(systemName: "chevron.up.circle.fill")
+                        Button {
+                            scanDestination = .existingProduct(product)
+                        } label: {
+                            Image(systemName: "chevron.up.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("查看商品歷史價格")
+                    }
+
+                    Text(product.name.isEmpty ? "未命名商品" : product.name)
+                        .font(.title3.bold())
+                        .lineLimit(1)
+
+                    if let latest = product.latestPriceObservation {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(latest.quantityWasEntered ? latest.formattedEffectiveUnitPrice : latest.formattedPrice)
+                                .font(.title2.bold())
+                            priceChangeLabel(for: product)
+                            Spacer(minLength: 0)
+                        }
+
+                        Text("\(latest.storeDisplayName)・\(latest.recordedAt.formatted(date: .numeric, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text("尚無價格紀錄")
                             .foregroundStyle(.secondary)
                     }
 
-                    if let product = scannedProduct {
-                        Text(product.name.isEmpty ? "未命名商品" : product.name)
-                            .font(.title3.bold())
-                            .lineLimit(1)
-
-                        if let latest = product.latestPriceObservation {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(latest.quantityWasEntered ? latest.formattedEffectiveUnitPrice : latest.formattedPrice)
-                                    .font(.title2.bold())
-                                priceChangeLabel(for: product)
-                                Spacer(minLength: 0)
-                            }
-
-                            Text("\(latest.storeDisplayName)・\(latest.recordedAt.formatted(date: .numeric, time: .shortened))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        } else {
-                            Text("尚無價格紀錄")
-                                .foregroundStyle(.secondary)
-                        }
-
-                    } else {
-                        Text("條碼 \(scannedBarcode)")
-                            .font(.subheadline.monospaced())
-                            .lineLimit(1)
-                    }
-
-                    if scannedProduct != nil, !quickModeSession.isEnabled {
+                    Button {
+                        scanDestination = .newPurchase(product)
+                    } label: {
                         Text("新購買")
                             .font(.title3.bold())
                             .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 9)
-                            .background(AppTheme.lightBlue.opacity(0.62), in: Capsule())
+                            .background(Color.red.opacity(0.18), in: Capsule())
                             .overlay {
-                                Capsule()
-                                    .stroke(.white.opacity(0.55), lineWidth: 1)
+                                Capsule().stroke(Color.red.opacity(0.28), lineWidth: 1)
                             }
-                            .accessibilityLabel("新購買")
-                    } else {
+                    }
+                    .buttonStyle(ImmediatePressStyle())
+                    .accessibilityLabel("新購買")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .glassEffect(.regular.tint(resultTint), in: .rect(cornerRadius: 20))
+            } else {
+                Button(action: openLookupDetails) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Label(scannerMessage, systemImage: "questionmark.circle")
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.up.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("條碼 \(scannedBarcode)")
+                            .font(.subheadline.monospaced())
+                            .lineLimit(1)
                         Text(quickModeSession.isEnabled ? "點擊快速紀錄" : "點擊建立資料")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .contentShape(.rect(cornerRadius: 20))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .contentShape(.rect(cornerRadius: 20))
+                .buttonStyle(.plain)
+                .glassEffect(.regular.tint(resultTint), in: .rect(cornerRadius: 20))
+                .accessibilityHint("建立商品資料")
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.tint(resultTint), in: .rect(cornerRadius: 20))
-            .accessibilityHint("開啟完整商品資料")
 
             if overseasModeEnabled {
                 Button("查詢正確外文名稱", systemImage: "globe") {
@@ -531,14 +551,11 @@ struct HomeView: View {
                 isManualProductPending = true
                 finishScanning()
             } label: {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     Image(systemName: "plus.rectangle.on.rectangle")
                         .font(.title2.bold())
                     Text("建立商品")
                         .font(.headline)
-                    Text("手動輸入")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 96)
                 .contentShape(.rect(cornerRadius: 20))
@@ -550,14 +567,14 @@ struct HomeView: View {
             NavigationLink {
                 ShoppingListView()
             } label: {
-                VStack(spacing: 8) {
-                    Image(systemName: "cart.fill")
+                VStack(spacing: 10) {
+                    Image(systemName: visibleShoppingListItems.isEmpty ? "cart" : "cart.fill")
                         .font(.title2.bold())
+                        .foregroundStyle(.black)
+                        .frame(width: 34, height: 30)
+                        .background(visibleShoppingListItems.isEmpty ? Color.white : Color.clear)
                     Text("待買清單")
                         .font(.headline)
-                    Text(visibleShoppingListItems.isEmpty ? "尚無資料" : "\(visibleShoppingListItems.count) 項")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 96)
                 .contentShape(.rect(cornerRadius: 20))

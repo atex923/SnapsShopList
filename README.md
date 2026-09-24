@@ -1,6 +1,6 @@
 # 購物記本（SnapsShopList）
 
-目前版本：V0.11.4
+目前版本：V0.12.0
 部署目標：iOS 26、iPhone 16／iPhone 17 Pro
 Bundle ID：`com.atex1.SnapshotBuyCheck`
 
