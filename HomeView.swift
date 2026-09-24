@@ -193,6 +193,12 @@ struct HomeView: View {
                 ScannedProductView(product: product) {
                     scannerMessage = "已新增「\(product.name)」採買紀錄"
                 }
+            case .newPurchase(let product):
+                NewPurchaseView(product: product) {
+                    scannedProduct = product
+                    scannedBarcode = product.barcode
+                    scannerMessage = "已新增「\(product.name)」採買紀錄"
+                }
             }
         }
         .sheet(isPresented: $isForeignNameLookupPresented) {
@@ -296,31 +302,13 @@ struct HomeView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        let related = ProductSimilarity.related(to: product, among: products, limit: 2)
-                        if !related.isEmpty {
-                            Divider()
-                            Text("同名或類似商品")
-                                .font(.caption.bold())
-                            ForEach(related) { relatedProduct in
-                                HStack {
-                                    Text(relatedProduct.name)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    if let record = relatedProduct.latestPriceObservation {
-                                        Text("\(record.formattedPrice)・單價 \(record.formattedEffectiveUnitPrice)")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .font(.caption)
-                            }
-                        }
                     } else {
                         Text("條碼 \(scannedBarcode)")
                             .font(.subheadline.monospaced())
                             .lineLimit(1)
                     }
 
-                    Text(quickModeSession.isEnabled ? "點擊快速紀錄" : (scannedProduct == nil ? "點擊建立資料" : "點擊查閱"))
+                    Text(quickModeSession.isEnabled ? "點擊快速紀錄" : (scannedProduct == nil ? "點擊建立資料" : "新購買"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -446,7 +434,7 @@ struct HomeView: View {
             return
         }
         if let scannedProduct {
-            scanDestination = .existingProduct(scannedProduct)
+            scanDestination = .newPurchase(scannedProduct)
         } else if databaseError.isEmpty {
             scanDestination = .newProduct(scannedBarcode, .purchase)
         } else {
@@ -921,6 +909,7 @@ private enum ScanDestination: Identifiable {
     case newProduct(String, ScanIntent)
     case manualProduct(String, ScanIntent)
     case existingProduct(Product)
+    case newPurchase(Product)
 
     var id: String {
         switch self {
@@ -930,6 +919,8 @@ private enum ScanDestination: Identifiable {
             "manual-\(intent)-\(identifier)"
         case .existingProduct(let product):
             "existing-\(product.id.uuidString)"
+        case .newPurchase(let product):
+            "purchase-\(product.id.uuidString)"
         }
     }
 }

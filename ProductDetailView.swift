@@ -4,7 +4,6 @@ import SwiftUI
 struct ScannedProductView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var allProducts: [Product]
     @Bindable var product: Product
     let onSaved: () -> Void
 
@@ -25,7 +24,6 @@ struct ScannedProductView: View {
                     ProductIdentityCard(product: product)
                     priceTable
                     scannedPantrySection
-                    RelatedProductsSection(product: product, allProducts: allProducts)
 
                     NavigationLink {
                         ProductDetailView(product: product)
@@ -36,7 +34,7 @@ struct ScannedProductView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
 
-                    Button("新增商品資料", systemImage: "plus.circle.fill") {
+                    Button("新購買", systemImage: "plus.circle.fill") {
                         isPurchasePresented = true
                     }
                     .buttonStyle(.borderedProminent)

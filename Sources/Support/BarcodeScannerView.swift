@@ -320,8 +320,8 @@ private final class BarcodeScannerViewController: UIViewController,
         captureSession.addOutput(output)
         output.setMetadataObjectsDelegate(self, queue: metadataQueue)
 
-        // Food packages primarily use one-dimensional retail barcodes. Keep QR
-        // as a fallback, but register and select all 1D formats first.
+        // Food packages primarily use one-dimensional retail barcodes. Register
+        // all 1D formats first; the two-dimensional QR Code is the second choice.
         let desiredTypes: [AVMetadataObject.ObjectType] = [
             .ean13, .ean8, .upce, .code128, .code93, .code39, .qr
         ]

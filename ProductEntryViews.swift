@@ -430,67 +430,25 @@ struct NewPurchaseView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    BarcodeFieldRow(
-                        value: ProductIdentifier.isManual(productBarcode) ? "無條碼商品" : productBarcode,
-                        onCode: { productBarcode = $0 },
-                        onError: { errorMessage = $0 },
-                        showsActions: false,
-                        labelWidth: 52
-                    )
-                    ProductNameField(
-                        name: $productName,
-                        brand: $brand,
-                        manufacturerName: $manufacturerName,
-                        allowsNameEditing: overseasModeEnabled,
-                        showsOverseasFields: overseasModeEnabled,
-                        showsMetadataButton: false,
-                        labelWidth: 52
-                    )
-                    if overseasModeEnabled {
-                        OverseasTextCaptureButton(title: "從包裝擷取商品名稱") { productName = $0 }
-                        Button("查詢正確外文名稱", systemImage: "globe") {
-                            isForeignNameLookupPresented = true
-                        }
-                    }
-                } header: {
-                    HStack(spacing: 8) {
-                        Text("商品")
-                        Spacer()
-                        Button {
-                            isBarcodeScannerPresented = true
-                        } label: {
-                            Image(systemName: "camera.viewfinder")
-                        }
-                        .buttonStyle(RaisedGlassIconButtonStyle())
-                        .accessibilityLabel("開啟相機掃描條碼")
-                        BarcodePhotoPickerButton(
-                            onCode: { productBarcode = $0 },
-                            onError: { errorMessage = $0 }
-                        )
-                        BrandManufacturerButton(
-                            brand: $brand,
-                            manufacturerName: $manufacturerName,
-                            showsOverseasFields: overseasModeEnabled
-                        )
-                    }
-                }
-                .font(.subheadline)
-                .listRowInsets(EdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 12))
-
-                EditablePurchasePhotosSection(
-                    existingPhotos: product.sortedPhotos,
-                    newImages: $draftPhotos,
-                    onAdd: {
-                        photoBeingReplaced = nil
+                CompactNewPurchaseCard(
+                    product: product,
+                    productName: productName,
+                    productBarcode: productBarcode,
+                    draftPhotos: $draftPhotos,
+                    priceText: $priceText,
+                    purchaseQuantityText: $purchaseQuantityText,
+                    onOpenCamera: {
+                        photoBeingReplaced = product.sortedPhotos.first
                         openCamera()
                     },
-                    onReplace: { photo in
-                        photoBeingReplaced = photo
-                        openCamera()
-                    },
-                    onDelete: { photo in
-                        photoPendingDeletion = photo
+                    onPhotoData: { data in
+                        if let photo = product.sortedPhotos.first {
+                            Task { await replacePhoto(photo, with: data, saveToLibrary: false) }
+                        } else if draftPhotos.isEmpty {
+                            draftPhotos.append(data)
+                        } else {
+                            draftPhotos[0] = data
+                        }
                     },
                     onError: { errorMessage = $0 }
                 )
@@ -513,15 +471,9 @@ struct NewPurchaseView: View {
                     storePresets: storePresets,
                     showsOverseasFields: overseasModeEnabled,
                     prefersCurrentPurchaseFirst: true,
-                    showsRecordedAt: false
+                    showsRecordedAt: false,
+                    showsPriceAndQuantity: false
                 )
-
-                Section {
-                    DisclosureGroup("價格記憶助手", isExpanded: $isPriceMemoryExpanded) {
-                        PriceMemoryDetails(product: product, currencyCode: defaultCurrencyCode)
-                            .padding(.leading, 14)
-                    }
-                }
 
                 Section {
                     DatePicker(
@@ -564,6 +516,9 @@ struct NewPurchaseView: View {
                 isCameraPresented = false
                 if let replacement {
                     Task { await replacePhoto(replacement, with: data, saveToLibrary: source == .camera) }
+                } else if product.sortedPhotos.isEmpty, !draftPhotos.isEmpty {
+                    draftPhotos[0] = data
+                    if source == .camera { saveCapturedPhotoToLibrary(data) }
                 } else {
                     guard product.sortedPhotos.count + draftPhotos.count < AppLimits.maximumPhotos else { return }
                     draftPhotos.append(data)
@@ -1231,6 +1186,123 @@ struct EditPurchaseView: View {
     }
 }
 
+private struct CompactNewPurchaseCard: View {
+    let product: Product
+    let productName: String
+    let productBarcode: String
+    @Binding var draftPhotos: [Data]
+    @Binding var priceText: String
+    @Binding var purchaseQuantityText: String
+    let onOpenCamera: () -> Void
+    let onPhotoData: (Data) -> Void
+    let onError: (String) -> Void
+
+    private var existingPhoto: ProductPhoto? { product.sortedPhotos.first }
+
+    private var photoPreview: UIImage? {
+        if let existingPhoto {
+            return ProductPhotoStore.load(photo: existingPhoto)
+        }
+        return draftPhotos.first.flatMap(UIImage.init(data:))
+    }
+
+    private var historyRecords: [PurchaseRecord] {
+        Array(product.comparisonRecords.sorted { $0.recordedAt > $1.recordedAt }.prefix(3))
+    }
+
+    var body: some View {
+        Section("新購買") {
+            HStack(alignment: .center, spacing: 12) {
+                Group {
+                    if let photoPreview {
+                        Image(uiImage: photoPreview)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    LabeledContent("商品條碼", value: ProductIdentifier.isManual(productBarcode) ? "無條碼商品" : productBarcode)
+                    LabeledContent("商品名稱", value: productName.isEmpty ? "未命名商品" : productName)
+                }
+                .font(.subheadline)
+
+                Spacer(minLength: 0)
+
+                PhotoSourceMenu(
+                    maximumSelectionCount: 1,
+                    onCamera: onOpenCamera,
+                    onPhotoData: onPhotoData,
+                    onError: onError
+                ) {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(RaisedGlassIconButtonStyle())
+                .accessibilityLabel("更換商品新照片")
+            }
+
+            HStack {
+                Label("食材庫", systemImage: "cabinet.fill")
+                Spacer()
+                if let entry = product.currentPantryEntry {
+                    Text("在庫")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.green)
+                    Text(entry.purchasedAt.formatted(date: .numeric, time: .omitted))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("未登記")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            FastNumericEntryField(
+                "購價",
+                placeholder: "本次付款總價",
+                text: $priceText,
+                keyboardType: .decimalPad
+            )
+            FastNumericEntryField(
+                "購數",
+                placeholder: "購買數量",
+                text: $purchaseQuantityText,
+                keyboardType: .numberPad
+            )
+
+            if historyRecords.isEmpty {
+                LabeledContent("歷次購買價格", value: "尚無紀錄")
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("歷次購買價格")
+                        .font(.subheadline.bold())
+                    ForEach(historyRecords) { record in
+                        HStack(spacing: 8) {
+                            Text(record.recordedAt.formatted(date: .numeric, time: .omitted))
+                            Text(record.storeDisplayName)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(record.formattedPrice)
+                                .fontWeight(.semibold)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct PurchaseFieldsSection: View {
     @Binding var recordedAt: Date
     @Binding var store: String
@@ -1250,21 +1322,24 @@ private struct PurchaseFieldsSection: View {
     let showsOverseasFields: Bool
     var prefersCurrentPurchaseFirst = false
     var showsRecordedAt = true
+    var showsPriceAndQuantity = true
 
     var body: some View {
         Section {
-            FastNumericEntryField(
-                prefersCurrentPurchaseFirst ? "付款金額" : "付款",
-                placeholder: "本次付款總價",
-                text: $priceText,
-                keyboardType: .decimalPad
-            )
-            FastNumericEntryField(
-                "購買數量(組)",
-                placeholder: "購買數量",
-                text: $purchaseQuantityText,
-                keyboardType: .numberPad
-            )
+            if showsPriceAndQuantity {
+                FastNumericEntryField(
+                    prefersCurrentPurchaseFirst ? "付款金額" : "付款",
+                    placeholder: "本次付款總價",
+                    text: $priceText,
+                    keyboardType: .decimalPad
+                )
+                FastNumericEntryField(
+                    "購買數量(組)",
+                    placeholder: "購買數量",
+                    text: $purchaseQuantityText,
+                    keyboardType: .numberPad
+                )
+            }
             storeField
             if showsOverseasFields {
                 OverseasTextCaptureButton(title: "從招牌或收據擷取店家") { store = $0 }
