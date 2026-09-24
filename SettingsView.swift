@@ -24,6 +24,7 @@ struct SettingsView: View {
     @AppStorage(SyncSettings.locationBookmarkKey) private var syncLocationBookmark = Data()
     @AppStorage(SyncSettings.locationNameKey) private var syncLocationName = ""
     @AppStorage(QuickModeSettings.showToggleKey) private var showQuickModeToggle = false
+    @AppStorage(BarcodeScanSettings.qrCodeEnabledKey) private var qrCodeEnabled = false
     @State private var exportDocument: SnapsBackupDocument?
     @State private var isExporterPresented = false
     @State private var isImporterPresented = false
@@ -155,6 +156,7 @@ struct SettingsView: View {
     private var overseasModeSection: some View {
         Section {
             Toggle("顯示快速模式開關", isOn: $showQuickModeToggle)
+            Toggle("讀取 QR Code（二維條碼）", isOn: $qrCodeEnabled)
             Toggle("海外模式", isOn: $overseasModeEnabled)
 
             if overseasModeEnabled {
@@ -174,8 +176,15 @@ struct SettingsView: View {
                 message: "國內模式以快速記錄為主，使用台幣且不載入外文工具。海外模式會顯示貨幣、OCR及外文名稱查詢；切換模式不會改寫既有資料。"
             )
         } footer: {
-            Text(showQuickModeToggle ? "首頁可在本次執行期間切換快速模式；完全關閉 App 後會自動關閉。" : (overseasModeEnabled ? "目前使用海外模式。" : "目前使用國內模式。"))
+            Text(modeFooterText)
         }
+    }
+
+    private var modeFooterText: String {
+        let modeText = showQuickModeToggle
+            ? "首頁可在本次執行期間切換快速模式；完全關閉 App 後會自動關閉。"
+            : (overseasModeEnabled ? "目前使用海外模式。" : "目前使用國內模式。")
+        return "(modeText) QR Code 讀取預設關閉，避免掃描時優先讀取二維條碼。"
     }
 
     private var dataMode: String {

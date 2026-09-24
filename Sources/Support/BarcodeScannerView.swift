@@ -15,8 +15,15 @@ enum BarcodePhotoRecognitionError: LocalizedError {
     }
 }
 
+enum BarcodeScanSettings {
+    static let qrCodeEnabledKey = "SnapsShopList.barcodeScanner.qrCodeEnabled"
+}
+
 enum BarcodePhotoRecognizer {
-    static func recognize(_ data: Data) async throws -> String {
+    static func recognize(
+        _ data: Data,
+        includesQRCode: Bool = UserDefaults.standard.bool(forKey: BarcodeScanSettings.qrCodeEnabledKey)
+    ) async throws -> String {
         guard
             let source = CGImageSourceCreateWithData(data as CFData, nil),
             let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
@@ -38,7 +45,8 @@ enum BarcodePhotoRecognizer {
                     return (value, observation.symbology)
                 })
             }
-            request.symbologies = [.ean13, .ean8, .upce, .code128, .code93, .code39, .qr]
+            request.symbologies = [.ean13, .ean8, .upce, .code128, .code93, .code39]
+                + (includesQRCode ? [.qr] : [])
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -53,7 +61,9 @@ enum BarcodePhotoRecognizer {
         for symbology in oneDimensionalOrder {
             if let match = candidates.first(where: { $0.1 == symbology }) { return match.0 }
         }
-        if let fallback = candidates.first { return fallback.0 }
+        if includesQRCode, let qrCode = candidates.first(where: { $0.1 == .qr }) {
+            return qrCode.0
+        }
         throw BarcodePhotoRecognitionError.noBarcode
     }
 }
@@ -66,6 +76,7 @@ struct BarcodeScannerSheet: View {
     @State private var scannerError = ""
     @State private var isMacroEnabled = true
     @State private var isMacroAvailable = false
+    @AppStorage(BarcodeScanSettings.qrCodeEnabledKey) private var qrCodeEnabled = false
     let onCode: (String) -> Void
     let onNoBarcode: () -> Void
 
@@ -77,6 +88,7 @@ struct BarcodeScannerSheet: View {
                     ZStack {
                         BarcodeScannerView(
                             isMacroEnabled: isMacroEnabled,
+                            qrCodeEnabled: qrCodeEnabled,
                             onCode: onCode,
                             onError: { scannerError = $0 },
                             onMacroAvailability: { available in
@@ -189,6 +201,7 @@ struct BarcodeScannerSheet: View {
 
 private struct BarcodeScannerView: UIViewControllerRepresentable {
     let isMacroEnabled: Bool
+    let qrCodeEnabled: Bool
     let onCode: (String) -> Void
     let onError: (String) -> Void
     let onMacroAvailability: (Bool) -> Void
@@ -196,6 +209,7 @@ private struct BarcodeScannerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> BarcodeScannerViewController {
         BarcodeScannerViewController(
             isMacroEnabled: isMacroEnabled,
+            qrCodeEnabled: qrCodeEnabled,
             onCode: onCode,
             onError: onError,
             onMacroAvailability: onMacroAvailability
@@ -204,6 +218,7 @@ private struct BarcodeScannerView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {
         uiViewController.setMacroEnabled(isMacroEnabled)
+        uiViewController.setQRCodeEnabled(qrCodeEnabled)
     }
 }
 
@@ -223,15 +238,18 @@ private final class BarcodeScannerViewController: UIViewController,
     private var hasReturnedCode = false
     private var isConfigured = false
     private var isMacroEnabled: Bool
+    private var qrCodeEnabled: Bool
     private var cameraDevice: AVCaptureDevice?
 
     init(
         isMacroEnabled: Bool,
+        qrCodeEnabled: Bool,
         onCode: @escaping (String) -> Void,
         onError: @escaping (String) -> Void,
         onMacroAvailability: @escaping (Bool) -> Void
     ) {
         self.isMacroEnabled = isMacroEnabled
+        self.qrCodeEnabled = qrCodeEnabled
         self.onCode = onCode
         self.onError = onError
         self.onMacroAvailability = onMacroAvailability
@@ -323,8 +341,8 @@ private final class BarcodeScannerViewController: UIViewController,
         // Food packages primarily use one-dimensional retail barcodes. Register
         // all 1D formats first; the two-dimensional QR Code is the second choice.
         let desiredTypes: [AVMetadataObject.ObjectType] = [
-            .ean13, .ean8, .upce, .code128, .code93, .code39, .qr
-        ]
+            .ean13, .ean8, .upce, .code128, .code93, .code39
+        ] + (qrCodeEnabled ? [.qr] : [])
         output.metadataObjectTypes = desiredTypes.filter {
             output.availableMetadataObjectTypes.contains($0)
         }
@@ -341,6 +359,22 @@ private final class BarcodeScannerViewController: UIViewController,
             self.isMacroEnabled = enabled
             if let cameraDevice = self.cameraDevice {
                 self.applyMacroSetting(to: cameraDevice)
+            }
+        }
+    }
+
+    func setQRCodeEnabled(_ enabled: Bool) {
+        sessionQueue.async { [weak self] in
+            guard let self, self.qrCodeEnabled != enabled else { return }
+            self.qrCodeEnabled = enabled
+            guard let output = self.captureSession?.outputs.compactMap({ $0 as? AVCaptureMetadataOutput }).first else {
+                return
+            }
+            let desiredTypes: [AVMetadataObject.ObjectType] = [
+                .ean13, .ean8, .upce, .code128, .code93, .code39
+            ] + (enabled ? [.qr] : [])
+            output.metadataObjectTypes = desiredTypes.filter {
+                output.availableMetadataObjectTypes.contains($0)
             }
         }
     }
@@ -388,7 +422,7 @@ private final class BarcodeScannerViewController: UIViewController,
             .ean13, .ean8, .upce, .code128, .code93, .code39
         ]
         let object = machineCodes.first { oneDimensionalTypes.contains($0.type) }
-            ?? machineCodes.first { $0.type == .qr }
+            ?? (qrCodeEnabled ? machineCodes.first { $0.type == .qr } : nil)
         guard let value = object?.stringValue, !value.isEmpty else { return }
 
         hasReturnedCode = true

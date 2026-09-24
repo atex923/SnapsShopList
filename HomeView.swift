@@ -308,9 +308,23 @@ struct HomeView: View {
                             .lineLimit(1)
                     }
 
-                    Text(quickModeSession.isEnabled ? "點擊快速紀錄" : (scannedProduct == nil ? "點擊建立資料" : "新購買"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    if scannedProduct != nil, !quickModeSession.isEnabled {
+                        Text("新購買")
+                            .font(.title3.bold())
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(AppTheme.lightBlue.opacity(0.62), in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(.white.opacity(0.55), lineWidth: 1)
+                            }
+                            .accessibilityLabel("新購買")
+                    } else {
+                        Text(quickModeSession.isEnabled ? "點擊快速紀錄" : "點擊建立資料")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)

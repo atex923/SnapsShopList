@@ -1212,45 +1212,53 @@ private struct CompactNewPurchaseCard: View {
 
     var body: some View {
         Section("新購買") {
-            HStack(alignment: .center, spacing: 12) {
-                Group {
-                    if let photoPreview {
-                        Image(uiImage: photoPreview)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Image(systemName: "photo")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 3) {
+                    Group {
+                        if let photoPreview {
+                            Image(uiImage: photoPreview)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                }
-                .frame(width: 64, height: 64)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .frame(width: 64, height: 64)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("商品條碼", value: ProductIdentifier.isManual(productBarcode) ? "無條碼商品" : productBarcode)
-                    LabeledContent("商品名稱", value: productName.isEmpty ? "未命名商品" : productName)
+                    PhotoSourceMenu(
+                        maximumSelectionCount: 1,
+                        onCamera: onOpenCamera,
+                        onPhotoData: onPhotoData,
+                        onError: onError
+                    ) {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(RaisedGlassIconButtonStyle())
+                    .accessibilityLabel("更換商品新照片")
                 }
-                .font(.subheadline)
 
-                Spacer(minLength: 0)
-
-                PhotoSourceMenu(
-                    maximumSelectionCount: 1,
-                    onCamera: onOpenCamera,
-                    onPhotoData: onPhotoData,
-                    onError: onError
-                ) {
-                    Image(systemName: "arrow.triangle.2.circlepath.camera")
-                        .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 9) {
+                    identityRow(
+                        title: "商品條碼",
+                        value: ProductIdentifier.isManual(productBarcode) ? "無條碼商品" : productBarcode
+                    )
+                    identityRow(
+                        title: "商品名稱",
+                        value: productName.isEmpty ? "未命名商品" : productName
+                    )
                 }
-                .buttonStyle(RaisedGlassIconButtonStyle())
-                .accessibilityLabel("更換商品新照片")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             HStack {
                 Label("食材庫", systemImage: "cabinet.fill")
+                    .font(.caption)
+                    .lineLimit(1)
                 Spacer()
                 if let entry = product.currentPantryEntry {
                     Text("在庫")
@@ -1299,6 +1307,20 @@ private struct CompactNewPurchaseCard: View {
                     }
                 }
             }
+        }
+    }
+
+    private func identityRow(title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 52, alignment: .leading)
+            Text(value)
+                .font(.subheadline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
